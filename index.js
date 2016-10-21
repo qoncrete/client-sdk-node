@@ -23,6 +23,7 @@ class QoncreteClient {
             HTTPRequester.post(sendLogdEndpoint).
                 headers({ 'Content-Type': 'application/json' }).
                 timeout(timeoutAfter).
+                pool({ agent: false }).
                 send(data).
                 end((response) => {
                     if (response.status === 204)
