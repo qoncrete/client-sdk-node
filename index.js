@@ -2,28 +2,33 @@
 
 const HTTPRequester = require('unirest')
 
-const LOGGER_ENDPOINT = 'https://log.qoncrete.com'
+const SCHEME = 'https'
+const LOGGER_ENDPOINT = `${SCHEME}://log.qoncrete.com`
 const TIME = { SECOND: 1000 }
 
 const noop = () => {}
 const isUUID = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)
 
-let sendLogdEndpoint
-
 class QoncreteClient {
     constructor({ sourceID, apiToken }) {
         ({ sourceID, apiToken } = validateQoncreteClient({ sourceID, apiToken }))
-        sendLogdEndpoint = `${LOGGER_ENDPOINT}/${sourceID}?token=${apiToken}`
+        this.sendLogdEndpoint = `${LOGGER_ENDPOINT}/${sourceID}?token=${apiToken}`
+        this.keepAliveAgent = {
+            keepAlive: true,
+            keepAliveMsec: 5000,
+            maxSockets: Infinity,
+            maxFreeSocket: 512
+        }
     }
 
     send(data, { timeoutAfter = 15 * TIME.SECOND, retryOnTimeout = 0 } = {}, callback = noop) {
         return new Promise((resolve, reject) => {
             const endPromiseAndCall = makeEndPromiseAndCall(resolve, reject, callback)
 
-            HTTPRequester.post(sendLogdEndpoint).
+            HTTPRequester.post(this.sendLogdEndpoint).
                 headers({ 'Content-Type': 'application/json' }).
                 timeout(timeoutAfter).
-                pool({ agent: false }).
+                pool(this.keepAliveAgent).
                 send(data).
                 end((response) => {
                     if (response.status === 204)
