@@ -22,9 +22,7 @@ class QoncreteClient {
     }
 
     send(data, { timeoutAfter = 15 * TIME.SECOND, retryOnTimeout = 0 } = {}, callback = noop) {
-        return new Promise((resolve, reject) => {
-            const endPromiseAndCall = makeEndPromiseAndCall(resolve, reject, callback)
-
+        const p = new Promise((resolve, reject) => {
             HTTPRequester.post(this.sendLogdEndpoint).
                 headers({ 'Content-Type': 'application/json' }).
                 timeout(timeoutAfter).
@@ -32,21 +30,28 @@ class QoncreteClient {
                 send(data).
                 end((response) => {
                     if (response.status === 204)
-                        return endPromiseAndCall(null)
+                        return resolve(null)
                     if (response.error && !response.body) {
                         if (!~['ESOCKETTIMEDOUT', 'ETIMEDOUT'].indexOf(response.error.code))
-                            return endPromiseAndCall(new QoncreteError(ErrorCode.NETWORK_ERROR.name, response.error.message))
+                            return reject(new QoncreteError(ErrorCode.NETWORK_ERROR.name, response.error.message))
                         if (retryOnTimeout > 0)
-                            return resolve(this.send(data, { timeoutAfter, retryOnTimeout: retryOnTimeout - 1 }, callback))
-                        return endPromiseAndCall(new QoncreteError(ErrorCode.TIMEDOUT.name, 'The request took too long time.'))
+                            return this.send(data, { timeoutAfter, retryOnTimeout: retryOnTimeout - 1 }, callback)
+                        return reject(new QoncreteError(ErrorCode.TIMEDOUT.name, 'The request took too long time.'))
                     }
-                    endPromiseAndCall(new QoncreteError(
-                        (response.clientError) ? ErrorCode.CLIENT_ERROR.name : ErrorCode.SERVER_ERROR.name,
-                        response.body)
+                    reject(new QoncreteError(
+                            (response.clientError) ? ErrorCode.CLIENT_ERROR.name : ErrorCode.SERVER_ERROR.name,
+                            response.body
+                        )
                     )
                 }
             )
         })
+
+        if (typeof callback !== 'function')
+            return p
+        return p.
+            then((...args) => callback(null, ...args)).
+            catch((err) => callback(err))
     }
 }
 
@@ -61,17 +66,6 @@ function validateQoncreteClient({ sourceID, apiToken })
         throw new QoncreteError(ErrorCode.CLIENT_ERROR.name, '`sourceID` and `apiToken` must be valid UUIDs.')
 
     return { sourceID, apiToken }
-}
-
-function makeEndPromiseAndCall(resolve, reject, callback) {
-    return function(err, ...args) {
-        if (err) {
-            reject(err)
-            callback(err)
-        }
-        resolve(...args)
-        callback(null, ...args)
-    }
 }
 
 class ErrorCode {
