@@ -1,6 +1,6 @@
 {
   "name": "qoncrete-sdk-node",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "qoncrete nodejs sdk",
   "main": "index.js",
   "author": "support@qoncrete.com",
