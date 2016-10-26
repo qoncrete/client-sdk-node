@@ -10,8 +10,9 @@ const noop = () => {}
 const isUUID = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)
 
 class QoncreteClient {
-    constructor({ sourceID, apiToken }) {
+    constructor({ sourceID, apiToken, autoBatch = true }) {
         ({ sourceID, apiToken } = validateQoncreteClient({ sourceID, apiToken }))
+        this.autoBatch = autoBatch
         this.sendLogdEndpoint = `${LOGGER_ENDPOINT}/${sourceID}?token=${apiToken}`
         this.keepAliveAgent = {
             keepAlive: true,
@@ -19,6 +20,17 @@ class QoncreteClient {
             maxSockets: Infinity,
             maxFreeSocket: 512
         }
+        if (this.autoBatch === true)
+            this._initAutoBatching()
+    }
+
+    _initAutoBatching() {
+        this.logPool = []
+        this.logScheduler = setInterval(() => {
+            if (!this.logPool.length)
+                return
+            console.log('send items via interval...')
+        }, 2 * TIME.SECOND)
     }
 
     send(data, { timeoutAfter = 15 * TIME.SECOND, retryOnTimeout = 0 } = {}, callback = noop) {
@@ -32,6 +44,7 @@ class QoncreteClient {
                     if (response.status === 204)
                         return resolve(null)
                     if (response.error && !response.body) {
+                        console.log(response.error)
                         if (!~['ESOCKETTIMEDOUT', 'ETIMEDOUT'].indexOf(response.error.code))
                             return reject(new QoncreteError(ErrorCode.NETWORK_ERROR.name, response.error.message))
                         if (retryOnTimeout > 0)
@@ -52,6 +65,19 @@ class QoncreteClient {
         return p.
             then((...args) => callback(null, ...args)).
             catch((err) => callback(err))
+    }
+
+    destroy() {
+        if (this.autoBatch)
+            clearInterval(this.logScheduler)
+    }
+}
+
+class Log {
+    constructor(data, opts, callback) {
+        this.data = data
+        this.opts = opts
+        this.callback = callback
     }
 }
 
