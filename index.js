@@ -2,82 +2,118 @@
 
 const HTTPRequester = require('unirest')
 
-const SCHEME = 'https'
-const LOGGER_ENDPOINT = `${SCHEME}://log.qoncrete.com`
 const TIME = { SECOND: 1000 }
 
 const noop = () => {}
 const isUUID = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)
 
+const async = require('async')
+
 class QoncreteClient {
-    constructor({ sourceID, apiToken, autoBatch = true }) {
+    constructor({
+        sourceID, apiToken, errorLogger = noop,
+        secureTransport = false, cacheDNS = true,
+        timeoutAfter = 15 * TIME.SECOND, retryOnTimeout = 1,
+        autoBatch = true, batchSize = 1000,
+        autoSendAfter = 2 * TIME.SECOND, concurrency = 200
+    }) {
         ({ sourceID, apiToken } = validateQoncreteClient({ sourceID, apiToken }))
-        this.autoBatch = autoBatch
-        this.sendLogdEndpoint = `${LOGGER_ENDPOINT}/${sourceID}?token=${apiToken}`
+        this.timeoutAfter = timeoutAfter
+        this.retryOnTimeout = retryOnTimeout
+        this.errorLogger = errorLogger
+        this.sendLogEndpoint = `http${secureTransport ? 's' : ''}://log.qoncrete.com/${sourceID}?token=${apiToken}`
+        this.sendBatchLogEndpoint = `http${secureTransport ? 's' : ''}://log.qoncrete.com/${sourceID}/batch?token=${apiToken}`
         this.keepAliveAgent = {
             keepAlive: true,
             keepAliveMsec: 5000,
             maxSockets: Infinity,
             maxFreeSocket: 512
         }
-        if (this.autoBatch === true)
-            this._initAutoBatching()
-    }
-
-    _initAutoBatching() {
+        require('dnscache')({ enable: !!cacheDNS, ttl: 300, cachesize: 1000 })
+        if (batchSize <= 0 || batchSize > 1000)
+            throw new QoncreteError(ErrorCode.CLIENT_ERROR.name, 'batchSize must be included between 1 and 1000')
+        this.batchSize = batchSize
+        this.autoBatch = !!autoBatch
+        this.autoSendAfter = autoSendAfter
         this.logPool = []
-        this.logScheduler = setInterval(() => {
-            if (!this.logPool.length)
-                return
-            console.log('send items via interval...')
-        }, 2 * TIME.SECOND)
+        if (this.autoBatch)
+            this._initAutoSendBatch()
+        this.queue = async.queue((task, cbk) => this._sendNow(task, cbk), concurrency)
     }
 
-    send(data, { timeoutAfter = 15 * TIME.SECOND, retryOnTimeout = 0 } = {}, callback = noop) {
-        const p = new Promise((resolve, reject) => {
-            HTTPRequester.post(this.sendLogdEndpoint).
-                headers({ 'Content-Type': 'application/json' }).
-                timeout(timeoutAfter).
-                pool(this.keepAliveAgent).
-                send(data).
-                end((response) => {
-                    if (response.status === 204)
-                        return resolve(null)
-                    if (response.error && !response.body) {
-                        console.log(response.error)
-                        if (!~['ESOCKETTIMEDOUT', 'ETIMEDOUT'].indexOf(response.error.code))
-                            return reject(new QoncreteError(ErrorCode.NETWORK_ERROR.name, response.error.message))
-                        if (retryOnTimeout > 0)
-                            return this.send(data, { timeoutAfter, retryOnTimeout: retryOnTimeout - 1 }, callback)
-                        return reject(new QoncreteError(ErrorCode.TIMEDOUT.name, 'The request took too long time.'))
-                    }
-                    reject(new QoncreteError(
-                            (response.clientError) ? ErrorCode.CLIENT_ERROR.name : ErrorCode.SERVER_ERROR.name,
-                            response.body
-                        )
-                    )
-                }
-            )
-        })
+    _initAutoSendBatch() {
+        if (this.autoSendIntervalID)
+            clearInterval(this.autoSendIntervalID)
+        this.autoSendIntervalID = setInterval(() => {
+            if (this.logPool.length) {
+                this.queue.push({ batch: this.logPool.splice(0, this.batchSize), retryOnTimeout: this.retryOnTimeout }, (err) => {
+                    if (err)
+                        this.errorLogger(err)
+                })
+                this._initAutoSendBatch()
+            }
+        }, this.autoSendAfter)
+    }
 
-        if (typeof callback !== 'function')
-            return p
-        return p.
-            then((...args) => callback(null, ...args)).
-            catch((err) => callback(err))
+    send(data) {
+
+        if (typeof data === 'string') {
+            try {
+                data = JSON.parse(data)
+            } catch (ex) {
+                return this.errorLogger(new QoncreteError(ErrorCode.CLIENT_ERROR, ex))
+            }
+        }
+        this.logPool = this.logPool.concat(data)
+        if (!this.autoBatch || this.logPool.length >= this.batchSize)
+        {
+            this.queue.push({ batch: this.logPool.splice(0, this.batchSize), retryOnTimeout: this.retryOnTimeout }, (err) => {
+                if (err)
+                    this.errorLogger(err)
+            })
+            this._initAutoSendBatch()
+        }
+    }
+
+    _sendNow({ batch, retryOnTimeout }, cbk) {
+        if (!batch.length)
+            return setImmediate(cbk)
+        let endpoint = this.sendBatchLogEndpoint
+        let data = batch
+
+        if (batch.length === 1) {
+            endpoint = this.sendLogEndpoint
+            data = batch[0]
+        }
+
+        HTTPRequester.post(endpoint).
+            headers({ 'Content-Type': 'application/json' }).
+            timeout(this.timeoutAfter).
+            pool(this.keepAliveAgent).
+            send(data).
+            end((response) => {
+                if (response.status === 204)
+                    return cbk()
+                if (response.error && !response.body) {
+                    if (!~['ESOCKETTIMEDOUT', 'ETIMEDOUT'].indexOf(response.error.code)) {
+                        return cbk(this.errorLogger(new QoncreteError(ErrorCode.NETWORK_ERROR.name, response.error.message)))
+                    }
+                    if (retryOnTimeout > 0)
+                        return this._sendNow({ batch, retryOnTimeout: retryOnTimeout - 1 }, cbk)
+                    return cbk(this.errorLogger(new QoncreteError(ErrorCode.TIMEDOUT.name, 'The request took too long time.')))
+                }
+
+                cbk(this.errorLogger(new QoncreteError(
+                        (response.clientError) ? ErrorCode.CLIENT_ERROR.name : ErrorCode.SERVER_ERROR.name,
+                        response.body)
+                    )
+                )
+            })
     }
 
     destroy() {
         if (this.autoBatch)
             clearInterval(this.logScheduler)
-    }
-}
-
-class Log {
-    constructor(data, opts, callback) {
-        this.data = data
-        this.opts = opts
-        this.callback = callback
     }
 }
 
