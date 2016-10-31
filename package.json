@@ -9,5 +9,12 @@
     "async": "^2.1.2",
     "dnscache": "^0.0.4",
     "unirest": "^0.5.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:qoncrete/client-sdk-node.git"
+  },
+  "bugs": {
+    "url": "https://github.com/qoncrete/client-sdk-node/issues"
   }
 }
