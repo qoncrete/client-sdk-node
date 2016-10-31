@@ -2,6 +2,16 @@
 
 Client SDK to be used in NodeJS V6.8.0+.
 
+## Installation
+Using npm:
+```bash
+npm install qoncrete-sdk-node
+```
+Using yarn
+```bash
+yarn add qoncrete-sdk-node
+```
+
 ## Usage
 ```javascript
 // 1) Require sdk
