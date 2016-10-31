@@ -1,6 +1,6 @@
 {
   "name": "qoncrete-sdk-node",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "qoncrete nodejs sdk",
   "main": "index.js",
   "author": "support@qoncrete.com",
@@ -9,5 +9,12 @@
     "async": "^2.1.2",
     "dnscache": "^0.0.4",
     "unirest": "^0.5.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:qoncrete/client-sdk-node.git"
+  },
+  "bugs": {
+    "url": "https://github.com/qoncrete/client-sdk-node/issues"
   }
 }
