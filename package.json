@@ -1,11 +1,13 @@
 {
   "name": "qoncrete-sdk-node",
-  "version": "0.1.4",
+  "version": "1.0.0",
   "description": "qoncrete nodejs sdk",
   "main": "index.js",
   "author": "support@qoncrete.com",
   "license": "MIT",
   "dependencies": {
+    "async": "^2.1.2",
+    "dnscache": "^0.0.4",
     "unirest": "^0.5.1"
   }
 }
