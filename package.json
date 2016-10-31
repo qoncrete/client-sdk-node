@@ -6,6 +6,8 @@
   "author": "support@qoncrete.com",
   "license": "MIT",
   "dependencies": {
+    "async": "^2.1.2",
+    "dnscache": "^0.0.4",
     "unirest": "^0.5.1"
   }
 }
