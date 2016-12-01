@@ -71,3 +71,5 @@ const rl = readline.createInterface({
 rl.on('line', (line) => { client.send(line) })
 rl.on('close', () => console.log('Done reading log file.'))
 ```
+
+This is the Node client for [qoncrete's custom analytics platform](https://www.qoncrete.com).

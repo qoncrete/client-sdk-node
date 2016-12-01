@@ -1,9 +1,9 @@
 {
   "name": "qoncrete-sdk-node",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "qoncrete nodejs sdk",
   "main": "index.js",
-  "author": "support@qoncrete.com",
+  "author": "qoncrete@goyoo.com",
   "license": "MIT",
   "dependencies": {
     "async": "^2.1.2",
