@@ -1,6 +1,9 @@
 # Qoncrete NodeJS Client SDK
 
-Client SDK to be used in NodeJS V6.8.0+.
+Client SDK to be used in NodeJS V6.8.0+.<br>
+
+> For older version of NodeJS, you can check this fork:<br>
+[GamaLabs/client-sdk-node](https://github.com/GamaLabs/client-sdk-node)
 
 ## Installation
 Using npm:
